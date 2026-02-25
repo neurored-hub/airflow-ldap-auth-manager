@@ -478,19 +478,33 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         """Authorize access to individual connections using the global policy."""
         return self._is_authorized(method=method, user=user)
 
+    def _request_attr(self, req: Any, key: str, default: Any = None) -> Any:
+        """Get attribute from a batch request item (dict or object)."""
+        if isinstance(req, dict):
+            return req.get(key, default)
+        return getattr(req, key, default)
+
     @override
     def batch_is_authorized_connection(
-        self, requests: Any, *, method: ResourceMethod, user: LdapUser, details: rd.ConnectionDetails | None = None
+        self, requests: Any, *, user: LdapUser
     ) -> bool:
         """Apply the same rules as ``is_authorized_connection`` for batch endpoints."""
-        return self._is_authorized(method=method, user=user)
+        for req in requests or ():
+            method = self._request_attr(req, "method", "GET")
+            if not self._is_authorized(method=method, user=user):
+                return False
+        return True
 
     @override
     def batch_is_authorized_variable(
-        self, requests: Any, *, method: ResourceMethod, user: LdapUser, details: rd.VariableDetails | None = None
+        self, requests: Any, *, user: LdapUser
     ) -> bool:
         """Apply standard policy to batch variable endpoints."""
-        return self._is_authorized(method=method, user=user)
+        for req in requests or ():
+            method = self._request_attr(req, "method", "GET")
+            if not self._is_authorized(method=method, user=user):
+                return False
+        return True
 
     @override
     def is_authorized_variable(
@@ -501,10 +515,14 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
 
     @override
     def batch_is_authorized_pool(
-        self, requests: Any, *, method: ResourceMethod, user: LdapUser, details: rd.PoolDetails | None = None
+        self, requests: Any, *, user: LdapUser
     ) -> bool:
         """Apply the same rules as pool single-item operations."""
-        return self._is_authorized(method=method, user=user)
+        for req in requests or ():
+            method = self._request_attr(req, "method", "GET")
+            if not self._is_authorized(method=method, user=user):
+                return False
+        return True
 
     @override
     def is_authorized_pool(
@@ -553,14 +571,17 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         self,
         requests: Any,
         *,
-        method: ResourceMethod,
         user: LdapUser,
-        access_entity: rd.DagAccessEntity | None = None,
-        details: rd.DagDetails | None = None,
     ) -> bool:
         """Batch DAG endpoints follow the same rules as single DAG operations."""
-        # Let editor write only when the operation targets DAG RUNs
-        return self._is_authorized(method=method, user=user, access_entity=access_entity, write_scope=None)
+        for req in requests or ():
+            method = self._request_attr(req, "method", "GET")
+            access_entity = self._request_attr(req, "access_entity")
+            if not self._is_authorized(
+                method=method, user=user, access_entity=access_entity, write_scope=None
+            ):
+                return False
+        return True
 
     @override
     def is_authorized_view(self, *, access_view: rd.AccessView, user: LdapUser) -> bool:
