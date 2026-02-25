@@ -480,14 +480,14 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
 
     @override
     def batch_is_authorized_connection(
-        self, *, method: ResourceMethod, user: LdapUser, details: rd.ConnectionDetails | None = None
+        self, requests: Any, *, method: ResourceMethod, user: LdapUser, details: rd.ConnectionDetails | None = None
     ) -> bool:
         """Apply the same rules as ``is_authorized_connection`` for batch endpoints."""
         return self._is_authorized(method=method, user=user)
 
     @override
     def batch_is_authorized_variable(
-        self, *, method: ResourceMethod, user: LdapUser, details: rd.VariableDetails | None = None
+        self, requests: Any, *, method: ResourceMethod, user: LdapUser, details: rd.VariableDetails | None = None
     ) -> bool:
         """Apply standard policy to batch variable endpoints."""
         return self._is_authorized(method=method, user=user)
@@ -501,7 +501,7 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
 
     @override
     def batch_is_authorized_pool(
-        self, *, method: ResourceMethod, user: LdapUser, details: rd.PoolDetails | None = None
+        self, requests: Any, *, method: ResourceMethod, user: LdapUser, details: rd.PoolDetails | None = None
     ) -> bool:
         """Apply the same rules as pool single-item operations."""
         return self._is_authorized(method=method, user=user)
@@ -551,6 +551,7 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
     @override
     def batch_is_authorized_dag(
         self,
+        requests: Any,
         *,
         method: ResourceMethod,
         user: LdapUser,
