@@ -432,6 +432,7 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         user: LdapUser,
         access_entity: "rd.DagAccessEntity | None" = None,
         write_scope: str | None = None,
+        allow_patch_as_editor: bool = False,
     ) -> bool:
         """
         Central authorization rule-set.
@@ -440,6 +441,7 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         - GET -> Viewer+
         - Non-GET:
             - If write_scope == "dag_run" (or DagAccessEntity.DAG_RUN), Editor+
+            - If allow_patch_as_editor and method is PATCH, Editor+ (e.g. pause/unpause a DAG)
             - Else Admin only
         """
         if not user:
@@ -458,6 +460,11 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         # Non-GET (write-ish)
         # Detect dag-run scoped writes either via explicit marker or DagAccessEntity
         if self._is_dag_run_scoped(write_scope, access_entity):
+            return self._policy.at_least(user.groups, Role.EDITOR)
+
+        # Pausing/unpausing a DAG is a PATCH on the DAG resource itself (access_entity is
+        # None, not DAG_RUN). Allow editors to do this, but not DELETE a DAG definition.
+        if allow_patch_as_editor and m == "PATCH":
             return self._policy.at_least(user.groups, Role.EDITOR)
 
         # Everything else requires full admin
@@ -562,9 +569,12 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         access_entity: rd.DagAccessEntity | None = None,
         details: rd.DagDetails | None = None,
     ) -> bool:
-        """Authorize DAG operations, allowing editors to manage DAG runs."""
-        # Let editor write only when the operation targets DAG RUNs
-        return self._is_authorized(method=method, user=user, access_entity=access_entity, write_scope=None)
+        """Authorize DAG operations, allowing editors to manage DAG runs and pause/unpause DAGs."""
+        # Let editor write when the operation targets DAG RUNs, or is a pause/unpause PATCH
+        return self._is_authorized(
+            method=method, user=user, access_entity=access_entity, write_scope=None,
+            allow_patch_as_editor=True,
+        )
 
     @override
     def batch_is_authorized_dag(
@@ -578,7 +588,8 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
             method = self._request_attr(req, "method", "GET")
             access_entity = self._request_attr(req, "access_entity")
             if not self._is_authorized(
-                method=method, user=user, access_entity=access_entity, write_scope=None
+                method=method, user=user, access_entity=access_entity, write_scope=None,
+                allow_patch_as_editor=True,
             ):
                 return False
         return True
