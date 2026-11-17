@@ -441,7 +441,9 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         - GET -> Viewer+
         - Non-GET:
             - If write_scope == "dag_run" (or DagAccessEntity.DAG_RUN), Editor+
-            - If allow_patch_as_editor and method is PATCH, Editor+ (e.g. pause/unpause a DAG)
+            - If allow_patch_as_editor and method is PUT, Editor+ (e.g. pause/unpause a DAG;
+              Airflow's requires_access_dag maps the PATCH /dags/{dag_id} HTTP route to the
+              ResourceMethod "PUT", not "PATCH" -- ResourceMethod only has GET/POST/PUT/DELETE)
             - Else Admin only
         """
         if not user:
@@ -462,9 +464,10 @@ class LdapAuthManager(BaseAuthManager[LdapUser]):
         if self._is_dag_run_scoped(write_scope, access_entity):
             return self._policy.at_least(user.groups, Role.EDITOR)
 
-        # Pausing/unpausing a DAG is a PATCH on the DAG resource itself (access_entity is
-        # None, not DAG_RUN). Allow editors to do this, but not DELETE a DAG definition.
-        if allow_patch_as_editor and m == "PATCH":
+        # Pausing/unpausing a DAG hits PATCH /dags/{dag_id}, which Airflow's own
+        # requires_access_dag checks as ResourceMethod "PUT" (access_entity is None,
+        # not DAG_RUN). Allow editors to do this, but not DELETE a DAG definition.
+        if allow_patch_as_editor and m == "PUT":
             return self._policy.at_least(user.groups, Role.EDITOR)
 
         # Everything else requires full admin
